@@ -19824,7 +19824,7 @@ function connectRemote() {
   remoteServer.on('client-disconnected', () => {
     // The last phone leaving revokes its TX; keep the decoder grace below.
     // A viewer disconnect must not interrupt a desktop-owned session.
-    if (!remoteServer.hasClient() && !(jtcatPopoutWin && !jtcatPopoutWin.isDestroyed())) haltRemoteJtcatTx();
+    if (ft8Engine && !remoteServer.hasClient() && !(jtcatPopoutWin && !jtcatPopoutWin.isDestroyed())) haltRemoteJtcatTx();
     // Band scope: the subscription dies with the socket. The mobile client
     // re-sends scope-subscribe on every auth-ok while a surface is up, so
     // nothing here needs to be sticky — and a flag left true would let a

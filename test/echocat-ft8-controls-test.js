@@ -67,6 +67,26 @@ async function loggingGate() {
   }
 }
 
+function disconnectOwnership() {
+  const start = main.indexOf("  remoteServer.on('client-disconnected', () => {");
+  const end = main.indexOf('    // Band scope:', start);
+  for (const [engine, desktop, otherClient, expected] of [
+    [true, false, false, 1],
+    [true, true, false, 0],
+    [true, false, true, 0],
+    [false, false, false, 0],
+  ]) {
+    let stopped = 0;
+    vm.runInNewContext(main.slice(start, end) + '  });', {
+      ft8Engine: engine ? {} : null,
+      jtcatPopoutWin: desktop ? { isDestroyed: () => false } : null,
+      remoteServer: { hasClient: () => otherClient, on: (_event, fn) => fn() },
+      haltRemoteJtcatTx: () => stopped++,
+    });
+    assert.strictEqual(stopped, expected, JSON.stringify({ engine, desktop, otherClient }));
+  }
+}
+
 function stopButton(cachedEnabled) {
   const sent = [];
   let click;
@@ -122,6 +142,7 @@ async function audioStartup(play) {
     ['single-engine backend halt', () => backendStop(false)],
     ['multi-engine backend halt', () => backendStop(true)],
     ['automatic and manual logging', loggingGate],
+    ['disconnect respects engine/client ownership', disconnectOwnership],
     ['audio with pending playback', () => audioStartup(() => new Promise(() => {}))],
     ['audio with autoplay refusal', () => audioStartup(() => Promise.reject(new Error('autoplay denied')))],
     ['audio with playable stream', () => audioStartup(() => Promise.resolve())],
