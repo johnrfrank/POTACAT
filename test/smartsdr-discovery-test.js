@@ -103,6 +103,20 @@ check('transmit delta WITHOUT dax leaves txDaxOn unchanged', () => {
   assert.strictEqual(c.txDaxOn, true);
 });
 
+check('saved band power does not overwrite the active transmitter readback', () => {
+  const c = newClient();
+  const powers = [], statuses = [];
+  c.on('power', value => powers.push(value));
+  c.on('transmit-status', value => statuses.push(value));
+  c._handleLine('S2EE80C53|transmit rfpower=1 dax=1');
+  c._handleLine('S2EE80C53|transmit band 0 band_name=160 rfpower=100 tunepower=10');
+  c._handleLine('S2EE80C53|transmit band 9 band_name=20 rfpower=1 tunepower=1');
+  assert.deepStrictEqual(powers, [1]);
+  assert.strictEqual(statuses.length, 1);
+  c._handleLine('S2EE80C53|transmit rfpower=2');
+  assert.deepStrictEqual(powers, [1, 2]);
+});
+
 check('setTxDax sends the global transmit switch, never the per-slice field', () => {
   const c = newClient();
   const sent = [];
