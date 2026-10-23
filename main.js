@@ -1844,6 +1844,7 @@ let _catLinkUpLast = false;
 let _catLinkUpKnown = false; // false until the first status of the session
 let _currentMode = '';
 let _remoteTxState = false;
+let _flexObservedTxState = false;
 // External RF-sensing ATU (LDG/MFJ) state + tune routine. Declared at module
 // scope so the single applyRigControl() dispatcher can reach the impl no matter
 // which transport (desktop IPC or ECHOCAT) triggered it. The real function body
@@ -15629,6 +15630,7 @@ function connectSmartSdr() {
     }
   });
   smartSdr.on('disconnected', () => {
+    _setFlexObservedTxState(false);
     sendCatLog('SmartSDR API disconnected — rig controls (ATU/filter/gain) unavailable');
     // Flex Direct: with no port-5002 CAT either, the radio is now uncontrollable.
     if (!cat || !cat.connected) sendCatStatus({ connected: false });
@@ -15711,6 +15713,9 @@ function connectSmartSdr() {
   // then only the optimistic echo. Everything downstream (renderer, VFO
   // popout, phone status broadcast) already flows from sendCatPower.
   smartSdr.on('power', sendCatPower);
+  smartSdr.on('transmit-state', ({ transmitting }) => {
+    _setFlexObservedTxState(transmitting);
+  });
   // Keep the radio's transmit block (deltas merged): the TX filter edges
   // (lo/hi) decide whether an audio tone can modulate at all — K3SBP's 8600
   // made 4 W from FT8 at 1290 Hz and nothing from a 1500 Hz Tune tone at the
@@ -15984,6 +15989,7 @@ function disconnectSmartSdr() {
     smartSdr = null;
   }
   stopSmartSdrAudio();
+  _setFlexObservedTxState(false);
 }
 
 // Flex Direct mid-session handoff. SmartSDR-Win's port-5002 CAT shim
@@ -16163,7 +16169,7 @@ function startSmartSdrAudio() {
   // is expected (slice RX muted) and the liveness check re-emits every
   // few seconds, so a genuinely-dead stream still surfaces once TX ends.
   smartSdrAudio.on('stall', ({ silentMs }) => {
-    if (_isEffectivelyTransmitting()) return; // expected — RX muted during TX
+    if (_isRadioTransmitting()) return; // expected — RX muted during TX
     if (_smartAudioResubscribing) return;     // re-subscribe already in flight
     // Rate-limit: a fresh subscribe takes a moment to get its first
     // frame; don't thrash if the stream is pathologically flaky. The
@@ -22701,8 +22707,20 @@ function _isEffectivelyTransmitting() {
   return _remoteTxState || (Date.now() < _cwTxLockoutUntilMs);
 }
 
+// Radio telemetry affects indicators and RX-audio health, without granting
+// transmit permission to the phone microphone or changing the FT8 sequencer.
+function _isRadioTransmitting() {
+  return _isEffectivelyTransmitting() || _flexObservedTxState;
+}
+
+function _setFlexObservedTxState(transmitting) {
+  if (_flexObservedTxState === !!transmitting) return;
+  _flexObservedTxState = !!transmitting;
+  _broadcastEffectiveTxState();
+}
+
 function _broadcastEffectiveTxState() {
-  const state = _isEffectivelyTransmitting();
+  const state = _isRadioTransmitting();
   if (win && !win.isDestroyed()) {
     win.webContents.send('remote-tx-state', state);
     if (vfoPopoutWin && !vfoPopoutWin.isDestroyed()) vfoPopoutWin.webContents.send('remote-tx-state', state);
@@ -22819,7 +22837,7 @@ function broadcastRemoteRadioStatus() {
     // text path (which doesn't engage handleRemotePtt). The iOS app's
     // defensive audio-health gate keys off this field per the mobile-
     // side handoff in audio-health-detector-gates-tx.md.
-    txState: _isEffectivelyTransmitting(),
+    txState: _isRadioTransmitting(),
     rigType,
     nb: _currentNbState,
     atu: _currentAtuState,

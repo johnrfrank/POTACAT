@@ -8026,9 +8026,10 @@
 
   // --- QSO Exchange display ---
   function ft8UpdateTxUi() {
-    ft8TxBtn.classList.toggle('active', ft8TxEnabled || ft8Transmitting);
-    txBanner.textContent = ft8Transmitting ? 'TRANSMITTING' : 'ARMED — listening; will transmit next turn';
-    txBanner.classList.toggle('hidden', !ft8Transmitting && !ft8TxEnabled);
+    ft8TxBtn.classList.toggle('active', ft8TxEnabled || ft8Transmitting || txState);
+    txBanner.textContent = ft8Transmitting ? 'TRANSMITTING'
+      : txState ? 'RADIO TRANSMITTING' : 'ARMED — listening; will transmit next turn';
+    txBanner.classList.toggle('hidden', !ft8Transmitting && !ft8TxEnabled && !txState);
   }
 
   function ft8RenderQsoExchange() {

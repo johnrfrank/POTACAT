@@ -44,6 +44,47 @@ function backendStop(multi) {
   if (multi) assert.deepStrictEqual(released, ['A', 'B', 'A', 'B']);
 }
 
+function radioTxBanner() {
+  for (const [radio, engine, armed, hidden, label] of [
+    [false, false, false, true, 'ARMED'],
+    [true, false, false, false, 'RADIO TRANSMITTING'],
+    [false, true, false, false, 'TRANSMITTING'],
+    [false, false, true, false, 'ARMED'],
+  ]) {
+    const classes = {};
+    const context = { txState: radio, ft8Transmitting: engine, ft8TxEnabled: armed,
+      ft8TxBtn: { classList: { toggle: (name, on) => { classes[name] = on; } } },
+      txBanner: { classList: { toggle: (name, on) => { classes[name] = on; } } } };
+    const start = source.indexOf('  function ft8UpdateTxUi() {');
+    const end = source.indexOf('\n  function ft8RenderQsoExchange()', start);
+    vm.runInNewContext(source.slice(start, end), context);
+    context.ft8UpdateTxUi();
+    assert.strictEqual(classes.hidden, hidden);
+    assert(context.txBanner.textContent.startsWith(label));
+    assert.strictEqual(context.ft8TxEnabled, armed, 'telemetry never arms the sequencer');
+  }
+}
+
+function observedRadioTxDoesNotGrantMicPermission() {
+  const { SmartSdrClient } = require('../lib/smartsdr');
+  const smartSdr = new SmartSdrClient();
+  const displayed = [];
+  const context = { smartSdr, _remoteTxState: false, _cwTxLockoutUntilMs: 0,
+    _flexObservedTxState: false, win: null, remoteAudioWin: null,
+    broadcastRemoteRadioStatus: () => displayed.push(context._isRadioTransmitting()) };
+  const start = main.indexOf('function _isEffectivelyTransmitting() {');
+  const end = main.indexOf('/**\n * Mark the desktop as transmitting CW text', start);
+  vm.runInNewContext(main.slice(start, end), context);
+  const handler = main.indexOf("  smartSdr.on('transmit-state',");
+  vm.runInNewContext(main.slice(handler, main.indexOf('\n  });', handler) + 6), context);
+  smartSdr._handleLine('S0|interlock state=TRANSMITTING source=RCA tx_allowed=1');
+  assert.strictEqual(context._isRadioTransmitting(), true, 'display follows actual radio TX');
+  assert.strictEqual(context._isEffectivelyTransmitting(), false, 'phone mic keeps its existing intent gate');
+  assert.strictEqual(context._remoteTxState, false);
+  smartSdr._handleLine('S0|interlock state=READY source= tx_allowed=1');
+  assert.deepStrictEqual(displayed, [true, false]);
+}
+
 async function loggingGate() {
   const context = { sendCatLog() {}, settings: { enableWsjtx: true }, wsjtx: { connected: true } };
   const start = main.indexOf('async function jtcatAutoLog(qso, opts) {');
@@ -195,6 +236,8 @@ async function audioStartup(play) {
     ['single-engine backend halt', () => backendStop(false)],
     ['multi-engine backend halt', () => backendStop(true)],
     ['automatic and manual logging', loggingGate],
+    ['observed radio TX does not grant microphone permission', observedRadioTxDoesNotGrantMicPermission],
+    ['FT8 tab shows radio TX independently of its sequencer', radioTxBanner],
     ['disconnect respects engine/client ownership', disconnectOwnership],
     ['completed exchange disarms the phone UI', completedExchangeDisarmsUi],
     ['CQ publishes armed state after encoding', cqPublishesArmedState],

@@ -103,6 +103,20 @@ check('transmit delta WITHOUT dax leaves txDaxOn unchanged', () => {
   assert.strictEqual(c.txDaxOn, true);
 });
 
+check('hardware PTT reports actual TX without sending any transmit command', () => {
+  const c = newClient();
+  const sent = [], states = [];
+  c._send = cmd => sent.push(cmd);
+  c.on('transmit-state', state => states.push(state));
+  c._handleLine('S0|interlock state=READY source= tx_allowed=1');
+  c._handleLine('S0|interlock state=TRANSMITTING source=RCA tx_allowed=1');
+  c._handleLine('S0|interlock state=TRANSMITTING source=RCA tx_allowed=1');
+  c._handleLine('S0|interlock state=READY source= tx_allowed=1');
+  assert.deepStrictEqual(states.map(s => s.transmitting), [false, true, false]);
+  assert.strictEqual(states[1].source, 'RCA');
+  assert.deepStrictEqual(sent, []);
+});
+
 check('saved band power does not overwrite the active transmitter readback', () => {
   const c = newClient();
   const powers = [], statuses = [];
