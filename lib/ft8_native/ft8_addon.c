@@ -75,6 +75,8 @@ typedef struct {
 static ht_entry_t hash_table[HASH_SIZE];
 static int hash_table_size = 0;
 static uint32_t ht_epoch = 0;   /* bumped once per Decode() call */
+static char ap_cached_mycall[16] = {0};
+static char ap_cached_dxcall[16] = {0};
 
 static void ht_init(void) {
     hash_table_size = 0;
@@ -139,13 +141,24 @@ static bool ht_lookup(ftx_callsign_hash_type_t type, uint32_t hash, char* callsi
                     (type == FTX_CALLSIGN_HASH_12_BITS) ? 10 : 0;
     uint16_t h10 = (hash >> (12 - shift)) & 0x3FFu;
     int idx = (h10 * 23) % HASH_SIZE;
+    int match = -1;
     while (hash_table[idx].callsign[0] != '\0') {
         if (((hash_table[idx].hash & 0x3FFFFFu) >> shift) == hash) {
-            strcpy(callsign, hash_table[idx].callsign);
-            hash_table[idx].age = ht_epoch;
-            return true;
+            if (match < 0) match = idx;
+            // Short hashes can identify several heard calls. Prefer our QSO
+            // context when its hash actually matches; never rewrite full calls.
+            if (strcmp(hash_table[idx].callsign, ap_cached_mycall) == 0 ||
+                strcmp(hash_table[idx].callsign, ap_cached_dxcall) == 0) {
+                match = idx;
+                break;
+            }
         }
         idx = (idx + 1) % HASH_SIZE;
+    }
+    if (match >= 0) {
+        strcpy(callsign, hash_table[match].callsign);
+        hash_table[match].age = ht_epoch;
+        return true;
     }
     callsign[0] = '\0';
     return false;
@@ -203,8 +216,6 @@ static bool ap_probe_lookup(ftx_callsign_hash_type_t t, uint32_t h, char* c) { (
 static void ap_probe_save(const char* c, uint32_t h) { (void)c; (void)h; }
 static ftx_callsign_hash_interface_t ap_probe_hash_if = { .lookup_hash = ap_probe_lookup, .save_hash = ap_probe_save };
 
-static char ap_cached_mycall[16] = {0};
-static char ap_cached_dxcall[16] = {0};
 static uint8_t ap1_mask[FTX_LDPC_N], ap1_bits[FTX_LDPC_N];
 static uint8_t ap2_mask[FTX_LDPC_N], ap2_bits[FTX_LDPC_N];
 static bool ap1_valid = false;

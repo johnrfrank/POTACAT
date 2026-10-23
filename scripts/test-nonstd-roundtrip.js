@@ -147,6 +147,22 @@ console.log('=== Portable opening identifies us to a cold listener ===');
   } finally { require('fs').unlinkSync(tmp); }
 }
 
+console.log('=== Type-4 hash collisions prefer the selected QSO partner ===');
+{
+  // These real calls share h10=1011. The live KA3IRT closing 73 was rendered
+  // as W5TRL because lookup returned the first occupied matching table slot.
+  addon.encode('CQ W5TRL EM10', 1500, 'FT8');
+  addon.encode('CQ KA3IRT EN90', 1500, 'FT8');
+  const samples = addon.encode('N9WLY/VE1 <KA3IRT> 73', 2300, 'FT8');
+  const texts = addon.decode(samples, 'FT8', 'N9WLY/VE1', 'KA3IRT', 0, 'N9WLY/VE1')
+    .map(d => d.text.trim());
+  check('KA3IRT acknowledgment is not assigned to colliding W5TRL',
+    texts.includes('N9WLY/VE1 <KA3IRT> 73'), JSON.stringify(texts));
+  const other = addon.encode('CQ W5TRL EM10', 1500, 'FT8');
+  check('ordinary full calls remain unchanged with a selected partner',
+    addon.decode(other, 'FT8', 'N9WLY/VE1', 'KA3IRT').some(d => d.text.trim() === 'CQ W5TRL EM10'));
+}
+
 console.log('='.repeat(50));
 console.log(`Results: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
