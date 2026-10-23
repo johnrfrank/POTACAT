@@ -13655,6 +13655,8 @@ function processRemoteJtcatQso(results) {
   if (!_autoSeqEnabled()) return;
   const qso = remoteJtcatQso; // capture reference — don't rely on global in callbacks
   advanceJtcatQso(qso, results, remoteJtcatSetTxMsg, remoteJtcatOnDone(qso));
+  // Finishing the courtesy leg disarms without setTxMsg/onDone callbacks.
+  remoteJtcatBroadcastQso();
 }
 
 function processPopoutJtcatQso(results) {
@@ -21288,6 +21290,7 @@ function connectRemote() {
     remoteJtcatQso = { mode: 'cq', call: null, grid: null, phase: 'cq', txMsg, cqMsg: txMsg, report: null, sentReport: null, myCall, myGrid, txRetries: 0 };
     await remoteJtcatSetTxMsg(txMsg); // encode first, then enable TX
     ft8Engine._txEnabled = true;
+    remoteJtcatBroadcastQso();
     ft8Engine.tryImmediateTx();
     console.log('[JTCAT Remote] CQ:', txMsg, '@ quiet freq', jtcatQuietFreq, 'Hz slot:', nextSlot);
   });

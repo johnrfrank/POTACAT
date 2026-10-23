@@ -87,6 +87,56 @@ function disconnectOwnership() {
   }
 }
 
+function completedExchangeDisarmsUi() {
+  const frames = [];
+  const engine = { _txEnabled: true, _txActive: false,
+    setTxMessage(message) { this.message = message; }, setTxSlot() {} };
+  const context = {
+    _autoSeqEnabled: () => true,
+    ft8Engine: engine, jtcatManager: null,
+    remoteJtcatQso: { mode: 'reply', phase: '73', call: 'WK3U',
+      myCall: 'N9WLY/VE1', txMsg: '<WK3U> N9WLY/VE1 73',
+      _txSentMsg: '<WK3U> N9WLY/VE1 73' },
+    remoteServer: { broadcastJtcatQsoState: s => frames.push(s) },
+    remoteJtcatSetTxMsg() {}, remoteJtcatOnDone: () => () => {},
+    advanceJtcatQso: (q, results, setTx, done) =>
+      require('../lib/jtcat-state-machine').advanceJtcatQso(q, results, setTx, done, { engine }),
+  };
+  const broadcast = main.slice(main.indexOf('function remoteJtcatBroadcastQso() {'),
+    main.indexOf('async function remoteJtcatSetTxMsg'));
+  const process = main.slice(main.indexOf('function processRemoteJtcatQso(results) {'),
+    main.indexOf('function processPopoutJtcatQso'));
+  vm.runInNewContext(broadcast + process, context);
+  context.processRemoteJtcatQso([]);
+  assert.strictEqual(engine._txEnabled, false, 'courtesy transmission completed');
+  assert(frames.some(s => s.phase === 'done' && s.txEnabled === false),
+    'the phone must receive disarmed state when the engine finishes, without waiting another slot');
+}
+
+async function cqPublishesArmedState() {
+  const frames = [];
+  let cq;
+  const engine = { _txEnabled: false, _lastRxSlot: 'odd', _txFreq: 1500,
+    setTxFreq() {}, setTxSlot() {}, async setTxMessage() {}, tryImmediateTx() {} };
+  const context = {
+    ft8Engine: engine, jtcatManager: null, remoteJtcatQso: null,
+    jtcatNoteOperatorAtRadio() {}, remoteJtcatMyCall: () => 'N9WLY/VE1',
+    remoteJtcatMyGrid: () => 'FN74', jtcatQuietFreq: 1500,
+    buildCqTxMsg: () => 'CQ N9WLY/VE1 FN74', settings: {}, console: { log() {} },
+    remoteServer: { on: (_event, fn) => { cq = fn; }, hasClient: () => true,
+      broadcastJtcatTxStatus() {}, broadcastJtcatQsoState: state => frames.push(state) },
+  };
+  const broadcast = main.slice(main.indexOf('function remoteJtcatBroadcastQso() {'),
+    main.indexOf('function popoutBroadcastQso'));
+  const handler = main.slice(main.indexOf("  remoteServer.on('jtcat-call-cq',"),
+    main.indexOf("  remoteServer.on('jtcat-reply',"));
+  vm.runInNewContext(broadcast + handler, context);
+  await cq();
+  assert.strictEqual(engine._txEnabled, true);
+  assert(frames.length && frames[frames.length - 1].txEnabled === true,
+    'the phone must receive armed state after CQ encoding finishes');
+}
+
 function stopButton(cachedEnabled) {
   const sent = [];
   let click;
@@ -143,6 +193,8 @@ async function audioStartup(play) {
     ['multi-engine backend halt', () => backendStop(true)],
     ['automatic and manual logging', loggingGate],
     ['disconnect respects engine/client ownership', disconnectOwnership],
+    ['completed exchange disarms the phone UI', completedExchangeDisarmsUi],
+    ['CQ publishes armed state after encoding', cqPublishesArmedState],
     ['audio with pending playback', () => audioStartup(() => new Promise(() => {}))],
     ['audio with autoplay refusal', () => audioStartup(() => Promise.reject(new Error('autoplay denied')))],
     ['audio with playable stream', () => audioStartup(() => Promise.resolve())],
