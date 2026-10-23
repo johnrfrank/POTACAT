@@ -400,7 +400,8 @@ section('Stalled QSO — end-to-end KQ4MHD scenario (partner heard, never sends 
   assertEq(action, 'closeout', 'reports were exchanged → closeout, not abort');
   let lastTx = null, doneCount = 0;
   sm.closeoutStalledQso(q, (m) => { lastTx = m; }, () => { doneCount++; }, {});
-  assertEq(doneCount, 1, 'QSO logged exactly once');
+  assertEq(doneCount, 1, 'closeout notifies once');
+  assertEq(q.unconfirmed, true, 'a timed-out exchange remains unconfirmed');
   assertEq(lastTx, 'W1ABC K3SBP 73', 'final 73 queued');
   drive(q, [], eng);
   assertEq(q.phase, '73', 'courtesy leg holds until the 73 has gone out');
@@ -410,10 +411,23 @@ section('Stalled QSO — end-to-end KQ4MHD scenario (partner heard, never sends 
   assertEq(eng._txEnabled, false, 'TX disabled at done');
 }
 
+section('Stalled QSO — late acknowledgment confirms an otherwise unconfirmed closeout');
+for (const myCall of ['K3SBP', 'N9WLY/VE1']) {
+  const q = { mode: 'reply', phase: 'r+report', call: 'W1ABC',
+    myCall, report: '-11', sentReport: '+07' };
+  sm.closeoutStalledQso(q, () => {}, () => {}, {});
+  let r = drive(q, [decode(myCall + ' W9OTHER RR73')], makeEngine());
+  assertEq(q.unconfirmed, true, 'another station cannot confirm this closeout');
+  assertEq(r.doneCount, 0, 'no completion callback for an unrelated acknowledgment');
+  r = drive(q, [decode('<' + myCall + '> W1ABC RR73')], makeEngine());
+  assertEq(q.unconfirmed, false, "the partner's addressed acknowledgment confirms it");
+  assertEq(r.doneCount, 1, 'confirmed closeout reaches the normal log callback');
+}
+
 section('Stalled QSO — giveUpMessage flavors');
 {
   assertEq(sm.giveUpMessage({ kind: 'closeout', call: 'W1ABC', max: 12 }),
-    'W1ABC stopped responding after 12 tries — QSO logged, sending final 73.', 'closeout notice');
+    'W1ABC stopped responding after 12 tries — no acknowledgment; final 73, not logged automatically.', 'closeout notice');
   assertEq(sm.giveUpMessage({ kind: 'abort', phase: 'cq', call: null, max: 15 }),
     'CQ: no answer after 15 calls — TX stopped.', 'cq abort');
   assertEq(sm.giveUpMessage({ kind: 'abort', phase: 'r+report', call: 'KH1/KH7Z', hound: true, max: 12 }),

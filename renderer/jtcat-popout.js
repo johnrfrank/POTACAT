@@ -728,7 +728,7 @@ function _applyPopoutTheme(payload) {
     { key: 'cq-report', dir: 'tx', label: function(q) { return (q.call || '?') + ' ' + q.myCall + ' ' + (q.sentReport || '-XX'); } },
     { key: 'cq-r+rpt',  dir: 'rx', label: function(q) { return q.myCall + ' ' + (q.call || '?') + ' R' + (q.report || '-XX'); } },
     { key: 'cq-rr73',   dir: 'tx', label: function(q) { return (q.call || '?') + ' ' + q.myCall + ' RR73'; } },
-    { key: 'done',      dir: '--', label: function()  { return 'QSO Complete'; } },
+    { key: 'done',      dir: '--', label: function(q) { return q.unconfirmed ? 'No acknowledgment — not logged automatically' : 'QSO Complete'; } },
   ];
   var QSO_PHASES_REPLY = [
     { key: 'reply',     dir: 'tx', label: function(q) { return q.call + ' ' + q.myCall + ' ' + q.myGrid; } },
@@ -736,7 +736,7 @@ function _applyPopoutTheme(payload) {
     { key: 'r+report',  dir: 'tx', label: function(q) { return q.call + ' ' + q.myCall + ' R' + (q.sentReport || '-XX'); } },
     { key: 'rr73-rx',   dir: 'rx', label: function(q) { return q.myCall + ' ' + q.call + ' RR73'; } },
     { key: '73',        dir: 'tx', label: function(q) { return q.call + ' ' + q.myCall + ' 73'; } },
-    { key: 'done',      dir: '--', label: function()  { return 'QSO Complete'; } },
+    { key: 'done',      dir: '--', label: function(q) { return q.unconfirmed ? 'No acknowledgment — not logged automatically' : 'QSO Complete'; } },
   ];
 
   function renderQsoTracker() {

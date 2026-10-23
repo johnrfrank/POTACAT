@@ -8056,7 +8056,9 @@
         '</div>';
     });
 
-    if (q.phase === 'done') {
+    if (q.unconfirmed) {
+      html += '<div class="ft8-qso-done" style="color:#ffc107">No acknowledgment — not logged automatically</div>';
+    } else if (q.phase === 'done') {
       html += '<div class="ft8-qso-done">QSO Complete!</div>';
     }
 

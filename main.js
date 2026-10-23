@@ -13467,7 +13467,7 @@ async function jtcatAutoLog(qso, opts) {
       sendCatLog(`[JTCAT] Auto-log skipped — no Field Day exchange received for ${q.call}`);
       return;
     }
-  } else if ((!q.report || !q.sentReport || !['73', 'cq-rr73', 'done'].includes(q.phase)) && !(opts && opts.manual)) {
+  } else if ((q.unconfirmed || !q.report || !q.sentReport || !['73', 'cq-rr73', 'done'].includes(q.phase)) && !(opts && opts.manual)) {
     sendCatLog(`[JTCAT] Auto-log skipped — incomplete exchange for ${q.call}`);
     return;
   }
