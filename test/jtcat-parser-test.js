@@ -145,7 +145,8 @@ eq(P.formatDirectedMsg('GB13COL', 'K3SBP', 'FN20'), '<GB13COL> K3SBP', 'grid DRO
 eq(P.formatDirectedMsg('GB13COL', 'K3SBP', ''), '<GB13COL> K3SBP', 'bare Tx1 to nonstd call');
 eq(P.formatDirectedMsg('W1ABC', 'PJ4/K1ABC', '-08'), 'W1ABC <PJ4/K1ABC> -08', 'MY nonstd call hashed on report leg');
 eq(P.formatDirectedMsg('W1ABC', 'PJ4/K1ABC', '73'), '<W1ABC> PJ4/K1ABC 73', 'MY nonstd call in full on ack leg');
-eq(P.formatDirectedMsg('W1ABC', 'PJ4/K1ABC', 'FN20'), 'W1ABC <PJ4/K1ABC>', 'grid dropped when MY call nonstd');
+eq(P.formatDirectedMsg('W1ABC', 'PJ4/K1ABC', 'FN20'), '<W1ABC> PJ4/K1ABC', 'opening identifies MY nonstandard call in full');
+eq(P.formatDirectedMsg('W1ABC', 'PJ4/K1ABC', ''), '<W1ABC> PJ4/K1ABC', 'bare opening also identifies MY nonstandard call');
 eq(P.formatDirectedMsg('GB13COL', 'PJ4/K1ABC', '73'), null, 'both nonstandard: refused (WSJT-X rule)');
 eq(P.formatDirectedMsg('<GB13COL>', 'K3SBP', 'RR73'), 'GB13COL <K3SBP> RR73', 'pre-bracketed input normalized');
 

@@ -126,6 +126,27 @@ console.log('=== Cold listener renders <...> until the full call is heard ===');
   check('cold decode shows <...>', out.includes('<...> K3SBP R-08'), JSON.stringify(out));
 }
 
+console.log('=== Portable opening identifies us to a cold listener ===');
+{
+  const parser = require('../renderer/jtcat-parser');
+  const opening = parser.formatDirectedMsg('WK3U', 'N9WLY/VE1', 'FN74');
+  const enc = addon.encode(opening, 1500, 'FT8');
+  const tmp = path.join(require('os').tmpdir(), 'portable-opening-' + process.pid + '.f32');
+  require('fs').writeFileSync(tmp, Buffer.from(enc.buffer, enc.byteOffset, enc.byteLength));
+  try {
+    const child = `
+      const addon = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'ft8_native', 'build', 'Release', 'ft8_native.node'))});
+      addon.encode('CQ WK3U EL89', 1500, 'FT8'); // listener knows its own call only
+      const buf = require('fs').readFileSync(${JSON.stringify(tmp)});
+      const samples = new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+      console.log(JSON.stringify(addon.decode(samples, 'FT8').map(d => d.text.trim())));
+    `;
+    const out = JSON.parse(execFileSync(process.execPath, ['-e', child]).toString().trim());
+    check('receiver learns the full portable callsign on our first reply',
+      out.some(t => t.includes('N9WLY/VE1')), JSON.stringify(out));
+  } finally { require('fs').unlinkSync(tmp); }
+}
+
 console.log('='.repeat(50));
 console.log(`Results: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

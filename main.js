@@ -13409,8 +13409,34 @@ function applyWsprBeaconControl(opts) {
 function remoteJtcatMyCall() { return (settings.myCallsign || '').toUpperCase(); }
 function remoteJtcatMyGrid() { return (settings.grid || '').toUpperCase().substring(0, 4); }
 
+// Halt the phone's current and scheduled transmissions, leaving RX running.
+function haltRemoteJtcatTx() {
+  setJtcatHuntMode('off', 'remote');
+  stopFullAutoCq('operator stopped transmission');
+  clearJtcatTxFailsafe();
+  clearJtcatIcomHardRelease();
+  if (jtcatManager) {
+    for (const id of jtcatManager.sliceIds) {
+      const eng = jtcatManager.getEngine(id);
+      if (eng) { eng._txEnabled = false; eng.setTxMessage(''); if (eng._txActive) eng.txComplete(); }
+      jtcatManager.releaseTx(id);
+    }
+  } else if (ft8Engine) {
+    ft8Engine._txEnabled = false;
+    ft8Engine.setTxMessage('');
+    if (ft8Engine._txActive) ft8Engine.txComplete();
+  }
+  remoteJtcatQso = null;
+  remoteJtcatBroadcastQso();
+  if (_icomNetworkTransport) { try { _icomNetworkTransport.cancelTx(); } catch {} }
+  if (smartSdrAudio) { try { smartSdrAudio.cancelTx(); } catch {} }
+  handleRemotePtt(false);
+  if (remoteServer) remoteServer.broadcastJtcatTxStatus({ state: 'rx', message: '' });
+}
+
 function remoteJtcatBroadcastQso() {
-  if (remoteServer) remoteServer.broadcastJtcatQsoState(remoteJtcatQso || { phase: 'idle' });
+  const eng = jtcatManager ? jtcatManager.txEngine : ft8Engine;
+  if (remoteServer) remoteServer.broadcastJtcatQsoState({ ...(remoteJtcatQso || { phase: 'idle' }), txEnabled: !!(eng && eng._txEnabled) });
 }
 
 async function remoteJtcatSetTxMsg(msg) {
@@ -13441,8 +13467,8 @@ async function jtcatAutoLog(qso, opts) {
       sendCatLog(`[JTCAT] Auto-log skipped — no Field Day exchange received for ${q.call}`);
       return;
     }
-  } else if (!q.report && !q.sentReport && !(opts && opts.manual)) {
-    sendCatLog(`[JTCAT] Auto-log skipped — no signal reports exchanged for ${q.call}`);
+  } else if ((!q.report || !q.sentReport || !['73', 'cq-rr73', 'done'].includes(q.phase)) && !(opts && opts.manual)) {
+    sendCatLog(`[JTCAT] Auto-log skipped — incomplete exchange for ${q.call}`);
     return;
   }
   // Prevent double-logging the same QSO
@@ -15500,6 +15526,8 @@ function stopJtcat() {
   // no status listener, so stop it here for both.
   stopJtcatClockMonitor();
   ft8Engine = null;
+  if (remoteServer) remoteServer.broadcastJtcatStatus({ running: false, state: 'stopped' });
+  remoteJtcatBroadcastQso();
   console.log('[JTCAT] Engine stopped');
 }
 
@@ -19794,6 +19822,9 @@ function connectRemote() {
   });
 
   remoteServer.on('client-disconnected', () => {
+    // The last phone leaving revokes its TX; keep the decoder grace below.
+    // A viewer disconnect must not interrupt a desktop-owned session.
+    if (!remoteServer.hasClient() && !(jtcatPopoutWin && !jtcatPopoutWin.isDestroyed())) haltRemoteJtcatTx();
     // Band scope: the subscription dies with the socket. The mobile client
     // re-sends scope-subscribe on every auth-ok while a surface is up, so
     // nothing here needs to be sticky — and a flag left true would let a
@@ -21406,6 +21437,7 @@ function connectRemote() {
 
   remoteServer.on('jtcat-enable-tx', ({ enabled }) => {
     if (ft8Engine) ft8Engine._txEnabled = enabled;
+    remoteJtcatBroadcastQso();
   });
 
   remoteServer.on('jtcat-auto-cq-mode', ({ mode }) => {
@@ -21470,26 +21502,7 @@ function connectRemote() {
   });
   remoteServer.on('jtcat-set-hound-mode', ({ enabled } = {}) => applyJtcatFlag('jtcatHoundMode', enabled, 'Hound mode'));
 
-  remoteServer.on('jtcat-halt-tx', () => {
-    clearJtcatTxFailsafe();
-    clearJtcatIcomHardRelease();
-    if (jtcatManager) {
-      for (const id of jtcatManager.sliceIds) {
-        const eng = jtcatManager.getEngine(id);
-        if (eng) { eng._txEnabled = false; eng.setTxMessage(''); if (eng._txActive) eng.txComplete(); }
-        jtcatManager.releaseTx(id);
-      }
-    } else if (ft8Engine) {
-      ft8Engine._txEnabled = false;
-      ft8Engine.setTxMessage('');
-      if (ft8Engine._txActive) ft8Engine.txComplete();
-    }
-    remoteJtcatQso = null;
-    remoteJtcatBroadcastQso();
-    if (_icomNetworkTransport) { try { _icomNetworkTransport.cancelTx(); } catch {} }
-    if (smartSdrAudio) { try { smartSdrAudio.cancelTx(); } catch {} }
-    handleRemotePtt(false);
-  });
+  remoteServer.on('jtcat-halt-tx', haltRemoteJtcatTx);
 
   remoteServer.on('jtcat-set-mode', ({ mode }) => {
     if (!ft8Engine) return;
@@ -22027,16 +22040,7 @@ function connectRemote() {
     sendCatLog(`[Echo CAT] Playing voice macro ${idx + 1} from phone`);
   });
 
-  remoteServer.on('jtcat-cancel-qso', () => {
-    if (ft8Engine) {
-      ft8Engine._txEnabled = false;
-      ft8Engine.setTxMessage('');
-      ft8Engine.setTxSlot('auto');
-      if (ft8Engine._txActive) ft8Engine.txComplete();
-    }
-    remoteJtcatQso = null;
-    remoteJtcatBroadcastQso();
-  });
+  remoteServer.on('jtcat-cancel-qso', haltRemoteJtcatTx);
 
   remoteServer.on('jtcat-skip-phase', async () => {
     if (!remoteJtcatQso || remoteJtcatQso.phase === 'done' || remoteJtcatQso.phase === 'idle') return;

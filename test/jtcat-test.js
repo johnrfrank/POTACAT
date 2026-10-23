@@ -504,14 +504,18 @@ section('CQ mode — happy path');
   {
     const eng = makeEngine();
     const r = drive(baseQ(), [decode('K3SBP A1BCD -12', { db: -6, df: 1234 })], eng);
-    assertEq(r.q.phase, 'cq-rr73', 'cq → cq-rr73 on compressed (no-grid) reply');
+    assertEq(r.q.phase, 'r+report', 'compressed reply waits for their acknowledgment');
+    assertEq(r.q.mode, 'reply', 'compressed reply uses the R-report reply sequence');
     assertEq(r.q.call, 'A1BCD', 'captured their call from compressed reply');
     assertEq(r.q.grid, '', 'grid is empty — they skipped Step 2');
     assertEq(r.q.report, '-12', 'captured their report of us');
     assertEq(r.q.sentReport, '-06', 'computed our SNR report');
     assertEq(r.lastTx, 'A1BCD K3SBP R-06', 'TX is R+our-report, NOT plain report or RR73');
-    assertEq(r.doneCount, 1, 'logged immediately on compressed-reply advance');
+    assertEq(r.doneCount, 0, 'no log before our report is acknowledged');
     assertEq(eng._lastRxFreq, 1234, 'RX freq tracked to their offset');
+    const next = drive(r.q, [decode('K3SBP A1BCD RR73')], eng);
+    assertEq(next.q.phase, '73', 'their acknowledgment advances to courtesy 73');
+    assertEq(next.doneCount, 1, 'log after the acknowledged exchange');
   }
 
   // R+report should NOT be misclassified as a compressed reply — must

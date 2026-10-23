@@ -117,7 +117,9 @@
   // Build a directed TX message applying WSJT-X's bracket rules when one call
   // is nonstandard (the 77-bit protocol can transmit only ONE call in full per
   // message — the other travels as a hash, displayed in <brackets>):
-  //   - grid/report legs: type 1 with the NONSTANDARD call hashed
+  //   - our nonstandard opening: type 4 with OUR call in full so a station
+  //       answering us for the first time can identify us, not just a hash.
+  //   - report legs: type 1 with the NONSTANDARD call hashed
   //       "<GB13COL> K3SBP R-08"; a grid payload is dropped entirely (WSJT-X
   //       omits the locator in nonstandard QSOs — there's no room in type 4
   //       and hash-first type 1 is reserved for reports).
@@ -138,12 +140,13 @@
     var isAck = /^(RRR|RR73|73)$/.test(pay);
     // No locator in nonstandard QSOs (checked only on non-ack legs: RR73
     // itself is grid-shaped — that's how the protocol encodes it).
+    var isOpening = !pay || GRID_RE.test(pay);
     if (!isAck && GRID_RE.test(pay)) pay = '';
-    if (isAck) {
+    if (isAck || (themStd && isOpening)) {
       // Type 4: nonstandard call in full, standard call hashed
       return themStd
-        ? '<' + them + '> ' + mine + ' ' + pay
-        : them + ' <' + mine + '> ' + pay;
+        ? '<' + them + '> ' + mine + (pay ? ' ' + pay : '')
+        : them + ' <' + mine + '>' + (pay ? ' ' + pay : '');
     }
     // Type 1: nonstandard call hashed, report (or nothing) in the payload slot
     return themStd

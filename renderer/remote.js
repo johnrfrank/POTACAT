@@ -2564,7 +2564,7 @@
         ft8RxTxBadge.textContent = ft8Transmitting ? 'TX' : 'RX';
         ft8RxTxBadge.className = ft8Transmitting ? 'ft8-rx-badge ft8-txing' : 'ft8-rx-badge';
         ft8TxBtn.classList.toggle('ft8-txing', ft8Transmitting);
-        txBanner.classList.toggle('hidden', !ft8Transmitting);
+        ft8UpdateTxUi();
         if (msg.txFreq != null) {
           ft8TxFreqHz = msg.txFreq;
           ft8TxFreqDisplay.textContent = 'TX: ' + Math.round(msg.txFreq) + ' Hz';
@@ -2594,7 +2594,9 @@
           setTimeout(() => toast.remove(), 4000);
           break;
         }
+        ft8TxEnabled = !!msg.txEnabled;
         ft8QsoState = (msg.phase && msg.phase !== 'idle') ? msg : null;
+        ft8UpdateTxUi();
         ft8RenderQsoExchange();
         ft8UpdateCqBtn();
         ft8TxMsgEl.textContent = (ft8QsoState && ft8QsoState.txMsg) ? ft8QsoState.txMsg : '--';
@@ -2774,7 +2776,8 @@
     }
     if (s.txState !== undefined) {
       txState = s.txState;
-      txBanner.classList.toggle('hidden', !s.txState);
+      if (activeTab === 'ft8') ft8UpdateTxUi();
+      else txBanner.classList.toggle('hidden', !s.txState);
       settingsOverlay.classList.toggle('disabled', s.txState);
       if (s.txState && scanning) stopScan();
       if (!s.txState && pttDown) {
@@ -5646,7 +5649,9 @@
         remoteAudio = document.getElementById('remote-audio');
         remoteAudio.srcObject = new MediaStream();
         remoteAudio.muted = false;
-        await remoteAudio.play().catch(() => {});
+        // An empty MediaStream keeps play() pending until tracks arrive.
+        // Negotiation below is what brings those tracks, so do not await it.
+        remoteAudio.play().catch(() => {});
         // Create AudioContext during user gesture so iOS Safari doesn't block it
         try {
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -8020,6 +8025,12 @@
   }
 
   // --- QSO Exchange display ---
+  function ft8UpdateTxUi() {
+    ft8TxBtn.classList.toggle('active', ft8TxEnabled || ft8Transmitting);
+    txBanner.textContent = ft8Transmitting ? 'TRANSMITTING' : 'ARMED — listening; will transmit next turn';
+    txBanner.classList.toggle('hidden', !ft8Transmitting && !ft8TxEnabled);
+  }
+
   function ft8RenderQsoExchange() {
     if (!ft8QsoState || ft8QsoState.phase === 'idle') {
       ft8QsoExchange.classList.add('hidden');
@@ -8151,16 +8162,11 @@
 
   // --- Control bar event handlers ---
 
-  // TX toggle
+  // CQ or selecting a station arms TX. This button always halts it, even
+  // when a reply/reconnect left the browser's cached enable flag stale.
+  ft8TxBtn.textContent = 'STOP TX';
   ft8TxBtn.addEventListener('click', () => {
-    ft8TxEnabled = !ft8TxEnabled;
-    ft8TxBtn.classList.toggle('active', ft8TxEnabled);
-    if (!ft8TxEnabled) {
-      // Halt TX — also cancel any active QSO
-      ft8Send({ type: 'jtcat-cancel-qso' });
-    } else {
-      ft8Send({ type: 'jtcat-enable-tx', enabled: true });
-    }
+    ft8Send({ type: 'jtcat-halt-tx' });
   });
 
   // Slot cycle: auto -> even -> odd -> auto
