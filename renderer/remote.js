@@ -8207,7 +8207,7 @@
   ft8LogBtn.addEventListener('click', () => {
     if (ft8QsoState && ft8QsoState.call) {
       ft8Send({ type: 'jtcat-log-qso' });
-      showLogToast('QSO logged: ' + ft8QsoState.call);
+      showLogToast('Log requested: ' + ft8QsoState.call);
     }
   });
 
